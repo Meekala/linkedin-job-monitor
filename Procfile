@@ -1,1 +1,1 @@
-web: python continuous_monitor.py
+worker: python continuous_monitor.py
