@@ -123,12 +123,13 @@ class LinkedInURLBuilder:
     def _get_time_filter(cls, posted_time: str) -> str:
         """Get LinkedIn's time filter parameter."""
         time_filters = {
+            '30m': 'r1800',     # Last 30 minutes
             '1h': 'r3600',      # Last hour
             '24h': 'r86400',    # Last 24 hours
             'week': 'r604800',  # Last week
             'month': 'r2592000' # Last month
         }
-        return time_filters.get(posted_time, 'r3600')  # Default to 1 hour
+        return time_filters.get(posted_time, 'r1800')  # Default to 30 minutes
     
     @classmethod
     def get_all_search_urls(cls, job_title: str, cities: List[str]) -> Dict[str, str]:

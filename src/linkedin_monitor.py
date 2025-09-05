@@ -80,8 +80,8 @@ class LinkedInJobMonitor:
                 logger.error(f"Unknown city: {city}. Available cities: {list(location_ids.keys())}")
                 return False, []
             
-            # LinkedIn guest API URL - filter for jobs posted in last 30 minutes (1800 seconds)
-            search_url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={quote(self.config.job_title)}&geoId={location_id}&f_TPR=r1800&start=0"
+            # LinkedIn jobs search URL - same endpoint as manual browsing with proper parameters
+            search_url = f"https://www.linkedin.com/jobs/search/?keywords={quote(self.config.job_title)}&geoId={location_id}&f_TPR=r1800&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&start=0"
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
