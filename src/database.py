@@ -359,12 +359,12 @@ class JobDatabase:
         finally:
             cursor.close()
     
-    def cleanup_old_jobs(self, days_old: int = 7) -> int:
+    def cleanup_old_jobs(self, days_old: int = 3) -> int:
         """
         Delete jobs older than specified days.
         
         Args:
-            days_old: Number of days after which to delete jobs (default 7)
+            days_old: Number of days after which to delete jobs (default 3)
             
         Returns:
             Number of jobs deleted

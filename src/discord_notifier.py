@@ -72,6 +72,43 @@ class DiscordNotifier:
         
         return sanitized
     
+    def _get_company_logo_url(self, company_name: str) -> str:
+        """
+        Get company logo URL using Clearbit Logo API.
+        
+        Args:
+            company_name: Company name to get logo for
+            
+        Returns:
+            Logo URL or fallback icon
+        """
+        if not company_name:
+            return "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"  # Generic building icon
+        
+        try:
+            # Clean company name for domain generation
+            clean_name = company_name.lower()
+            
+            # Remove common business suffixes
+            suffixes = [' inc.', ' inc', ' llc', ' ltd', ' corporation', ' corp', ' co.', ' company']
+            for suffix in suffixes:
+                clean_name = clean_name.replace(suffix, '')
+            
+            # Remove special characters and spaces
+            clean_name = ''.join(char for char in clean_name if char.isalnum() or char == ' ')
+            clean_name = clean_name.strip().replace(' ', '')
+            
+            # Generate domain (most common pattern)
+            if clean_name:
+                domain = f"{clean_name}.com"
+                return f"https://logo.clearbit.com/{domain}"
+            else:
+                return "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+                
+        except Exception as e:
+            logger.debug(f"Error generating logo URL for {company_name}: {e}")
+            return "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+    
     def get_webhook_for_city(self, city: str) -> str:
         """Get the appropriate webhook URL for a city."""
         # Validate city input
@@ -108,11 +145,21 @@ class DiscordNotifier:
         safe_title = self._sanitize_text(job.title or 'Unknown Position', 200)
         safe_company = self._sanitize_text(job.company or 'Unknown Company', 100)
         
+        # Get company logo
+        company_logo_url = self._get_company_logo_url(safe_company)
+        
         embed = {
             "title": f"{safe_title}",
             "description": f"**{safe_company}**",
             "color": embed_color,
             "timestamp": datetime.utcnow().isoformat(),
+            "thumbnail": {
+                "url": company_logo_url
+            },
+            "author": {
+                "name": safe_company,
+                "icon_url": company_logo_url
+            },
             "fields": [],
             "footer": {
                 "text": "LinkedIn Job Monitor • Apply quickly for best results!",
