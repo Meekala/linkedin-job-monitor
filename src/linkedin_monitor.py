@@ -80,8 +80,9 @@ class LinkedInJobMonitor:
                 logger.error(f"Unknown city: {city}. Available cities: {list(location_ids.keys())}")
                 return False, []
             
-            # LinkedIn jobs search URL - same endpoint as manual browsing with proper parameters
-            search_url = f"https://www.linkedin.com/jobs/search/?keywords={quote(self.config.job_title)}&geoId={location_id}&f_TPR=r1800&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&start=0"
+            # LinkedIn jobs search URL - exact format as manual browsing (lowercase keywords, same parameter order)
+            keywords_lowercase = self.config.job_title.lower()
+            search_url = f"https://www.linkedin.com/jobs/search/?f_TPR=r1800&geoId={location_id}&keywords={quote(keywords_lowercase)}&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&start=0"
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -140,6 +141,11 @@ class LinkedInJobMonitor:
                     
                     # Create job object if we have essential data
                     if title and company:
+                        # Filter for relevant product management jobs only
+                        if not self._is_relevant_product_job(title, description):
+                            logger.debug(f"Skipping irrelevant job: {title} at {company}")
+                            continue
+                        
                         # Generate company career page URL
                         company_career_url = None
                         if company:
@@ -323,6 +329,115 @@ class LinkedInJobMonitor:
                 return salary_text
         
         return ""
+    
+    def _is_relevant_product_job(self, title: str, description: str = "") -> bool:
+        """
+        Filter jobs to only include relevant product management positions.
+        
+        Args:
+            title: Job title
+            description: Job description (optional)
+            
+        Returns:
+            True if job is relevant product management role
+        """
+        if not title:
+            return False
+        
+        title_lower = title.lower()
+        desc_lower = description.lower() if description else ""
+        
+        # Specific product management role keywords - must contain at least one
+        product_keywords = [
+            'product manager',
+            'associate product manager',
+            'sr. product manager',
+            'senior product manager', 
+            'principal product manager',
+            'staff product manager',
+            'product operations',
+            'product ops',
+            'apm',  # Associate Product Manager
+            'spm',  # Senior Product Manager
+        ]
+        
+        # Check if title contains specific product management keywords
+        has_product_keyword = any(keyword in title_lower for keyword in product_keywords)
+        
+        if not has_product_keyword:
+            return False
+        
+        # Exclusion keywords - skip jobs with these terms (non-product management)
+        exclusion_keywords = [
+            'clinical',
+            'medical', 
+            'healthcare',
+            'hospital',
+            'patient',
+            'nursing',
+            'therapy',
+            'pharmaceutical',
+            'education',
+            'academic',
+            'school',
+            'teaching',
+            'instructor',
+            'curriculum',
+            'construction',
+            'real estate',
+            'property management',
+            'facility',
+            'maintenance',
+            'janitorial',
+            'security guard',
+            'warehouse',
+            'logistics coordinator',
+            'driver',
+            'delivery',
+            'food service',
+            'restaurant',
+            'retail',
+            'sales associate',
+            'customer service rep',
+        ]
+        
+        # Check for exclusions in both title and description
+        text_to_check = f"{title_lower} {desc_lower}"
+        has_exclusion = any(keyword in text_to_check for keyword in exclusion_keywords)
+        
+        if has_exclusion:
+            return False
+        
+        # Additional positive signals in description
+        positive_signals = [
+            'product strategy',
+            'product roadmap', 
+            'user experience',
+            'product development',
+            'market research',
+            'product launch',
+            'feature',
+            'agile',
+            'scrum',
+            'stakeholder',
+            'kpi',
+            'metrics',
+            'a/b test',
+            'user story',
+            'mvp',
+            'saas',
+            'software',
+            'tech',
+            'startup',
+        ]
+        
+        # Bonus points for positive signals, but not required
+        has_positive_signal = any(signal in desc_lower for signal in positive_signals)
+        
+        # Log the decision for debugging
+        logger.debug(f"Job filtering - '{title}': product_keyword={has_product_keyword}, exclusion={has_exclusion}, positive_signal={has_positive_signal}")
+        
+        return True  # Passed all filters
     
     def find_and_notify_jobs(self) -> int:
         """

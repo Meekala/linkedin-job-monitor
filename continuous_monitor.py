@@ -125,24 +125,24 @@ class ContinuousJobMonitor:
             self.monitor.discord.notify_search_started(config.cities)
             logger.info(f"Monitoring started for cities: {cities_str}")
             
-            # Determine next 4pm run time
+            # Determine next 4:30pm run time
             now = datetime.now()
-            next_4pm = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            next_430pm = now.replace(hour=16, minute=30, second=0, microsecond=0)
             
-            # If it's already past 4pm today, schedule for 4pm tomorrow
-            if now.hour >= 16:
-                next_4pm = next_4pm + timedelta(days=1)
+            # If it's already past 4:30pm today, schedule for 4:30pm tomorrow
+            if now.hour > 16 or (now.hour == 16 and now.minute >= 30):
+                next_430pm = next_430pm + timedelta(days=1)
             
-            logger.info(f"Next job search scheduled for: {next_4pm.strftime('%Y-%m-%d at 4:00 PM')}")
+            logger.info(f"Next job search scheduled for: {next_430pm.strftime('%Y-%m-%d at 4:30 PM')}")
             
-            # Schedule job checks every 30 minutes starting at 4:00pm
-            # This will run at 4:00, 4:30, 5:00, 5:30, etc.
+            # Schedule job checks every 30 minutes starting at 4:30pm
+            # This will run at 4:30, 5:00, 5:30, 6:00, etc.
             self.scheduler.add_job(
                 func=self.job_check_task,
                 trigger=IntervalTrigger(minutes=30),
-                start_date=next_4pm,
+                start_date=next_430pm,
                 id='job_check',
-                name='LinkedIn Job Check (every 30 min from 4pm)',
+                name='LinkedIn Job Check (every 30 min from 4:30pm)',
                 replace_existing=True
             )
             
@@ -157,7 +157,7 @@ class ContinuousJobMonitor:
                 replace_existing=True
             )
             
-            logger.info(f"Scheduled job checks every 30 minutes starting at 4:00 PM")
+            logger.info(f"Scheduled job checks every 30 minutes starting at 4:30 PM")
             logger.info("Press Ctrl+C to stop monitoring")
             
             self.is_running = True
@@ -204,7 +204,7 @@ class ContinuousJobMonitor:
         if self.scheduler.running:
             next_run = self.scheduler.get_job('job_check').next_run_time if self.scheduler.get_job('job_check') else None
             print(f"  Next check: {next_run}")
-            print(f"  Schedule: Every 30 minutes starting at 4:00 PM")
+            print(f"  Schedule: Every 30 minutes starting at 4:30 PM")
 
 def main():
     """Main entry point."""
