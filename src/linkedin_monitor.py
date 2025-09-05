@@ -357,6 +357,8 @@ class LinkedInJobMonitor:
             'staff product manager',
             'product operations',
             'product ops',
+            'product marketing manager',  # Include product marketing
+            'technical product manager',  # Include technical PM
             'apm',  # Associate Product Manager
             'spm',  # Senior Product Manager
         ]
