@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 # Add src directory to path
 sys.path.insert(0, 'src')
@@ -170,7 +171,7 @@ def scheduled_job_search():
     logger.info("🏁 SCHEDULED JOB SEARCH COMPLETED")
 
 def start_scheduler():
-    """Start the job scheduler with enhanced configuration."""
+    """Start the job scheduler with 9am start and consistent schedule."""
     global scheduler
     logger.info("📅 Starting job scheduler...")
     
@@ -186,23 +187,65 @@ def start_scheduler():
     # Calculate interval from config (default 30 minutes)
     interval_minutes = int(os.getenv('CHECK_INTERVAL_MINUTES', '30'))
     
-    # Run first job after initialization delay
-    first_run = datetime.now() + timedelta(minutes=2)  # 2 minutes for full initialization
-    logger.info(f"⏰ First scheduled job will run at: {first_run.strftime('%H:%M:%S')}")
-    logger.info(f"⏰ Then every {interval_minutes} minutes after that")
+    # Schedule job to run at consistent times starting at 9:00 AM ET
+    # This ensures jobs run at 9:00, 9:30, 10:00, 10:30, etc.
+    logger.info(f"⏰ Scheduling jobs to run every {interval_minutes} minutes starting at 9:00 AM ET")
+    logger.info("📋 Schedule: 9:00 AM, 9:30 AM, 10:00 AM, 10:30 AM, etc.")
     
-    # Schedule recurring job search
+    # Use cron trigger to run at specific minute intervals aligned to the hour
+    if interval_minutes == 30:
+        # Run at :00 and :30 minutes past each hour, starting from 9 AM
+        cron_minute = "0,30"
+        cron_hour = "9-23"  # 9 AM to 11 PM ET
+    elif interval_minutes == 15:
+        # Run every 15 minutes starting from 9 AM
+        cron_minute = "0,15,30,45"
+        cron_hour = "9-23"
+    elif interval_minutes == 60:
+        # Run every hour starting from 9 AM
+        cron_minute = "0"
+        cron_hour = "9-23"
+    else:
+        # Fallback to interval-based scheduling if custom interval
+        logger.info(f"Using interval-based scheduling for {interval_minutes} minute interval")
+        first_run = datetime.now() + timedelta(minutes=2)
+        scheduler.add_job(
+            func=scheduled_job_search,
+            trigger=IntervalTrigger(minutes=interval_minutes),
+            start_date=first_run,
+            id='railway_job_search',
+            name=f'Railway LinkedIn Job Search (every {interval_minutes}m)',
+            replace_existing=True
+        )
+        scheduler.start()
+        logger.info(f"✅ Job scheduler started with custom {interval_minutes}-minute interval")
+        return
+    
+    # Schedule with cron trigger for consistent times
     scheduler.add_job(
         func=scheduled_job_search,
-        trigger=IntervalTrigger(minutes=interval_minutes),
-        start_date=first_run,
-        id='railway_job_search',
-        name=f'Railway LinkedIn Job Search (every {interval_minutes}m)',
+        trigger=CronTrigger(
+            minute=cron_minute,
+            hour=cron_hour,
+            timezone='US/Eastern'
+        ),
+        id='railway_job_search_cron',
+        name=f'Railway LinkedIn Job Search (every {interval_minutes}m from 9 AM)',
         replace_existing=True
     )
     
+    # Also add immediate startup job (runs once in 2 minutes)
+    startup_time = datetime.now() + timedelta(minutes=2)
+    scheduler.add_job(
+        func=lambda: logger.info("🚀 Startup job completed - cron schedule now active"),
+        trigger='date',
+        run_date=startup_time,
+        id='startup_job',
+        name='One-time startup job'
+    )
+    
     scheduler.start()
-    logger.info(f"✅ Job scheduler started (interval: {interval_minutes} minutes)")
+    logger.info(f"✅ Job scheduler started with cron schedule ({interval_minutes}m intervals from 9 AM)")
     
     # Log scheduler info
     logger.info(f"📊 Scheduler timezone: {scheduler.timezone}")
