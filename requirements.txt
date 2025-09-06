@@ -5,3 +5,6 @@ beautifulsoup4==4.12.2
 
 # Scheduling
 APScheduler==3.10.4
+
+# Web server for Railway
+Flask==3.0.0
