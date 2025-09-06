@@ -122,23 +122,16 @@ def start_scheduler():
     
     scheduler = BackgroundScheduler()
     
-    # Calculate next 30-minute interval
-    now = datetime.now()
-    next_run = now.replace(second=0, microsecond=0)
+    # Run first job immediately after 30 seconds to allow initialization
+    first_run = datetime.now() + timedelta(seconds=30)
+    logger.info(f"⏰ First job search will run at: {first_run.strftime('%H:%M:%S')}")
+    logger.info(f"⏰ Then every 30 minutes after that")
     
-    # If we're past 30 minutes, start at next hour
-    if now.minute >= 30:
-        next_run = next_run.replace(minute=0) + timedelta(hours=1)
-    else:
-        next_run = next_run.replace(minute=30)
-    
-    logger.info(f"⏰ Next job search scheduled for: {next_run.strftime('%H:%M:%S')}")
-    
-    # Schedule job every 30 minutes
+    # Schedule job every 30 minutes, starting soon
     scheduler.add_job(
         func=scheduled_job_search,
         trigger=IntervalTrigger(minutes=30),
-        start_date=next_run,
+        start_date=first_run,
         id='railway_job_search',
         name='Railway LinkedIn Job Search'
     )
