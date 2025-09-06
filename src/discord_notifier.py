@@ -253,7 +253,7 @@ class DiscordNotifier:
     
     def _send_webhook(self, payload: Dict, webhook_url: str = None) -> bool:
         """
-        Send payload to Discord webhook.
+        Send payload to Discord webhook with fallback support.
         
         Args:
             payload: Discord webhook payload
@@ -262,8 +262,36 @@ class DiscordNotifier:
         Returns:
             True if successful, False otherwise
         """
+        primary_url = webhook_url or self.webhook_url
+        
+        # Try primary webhook first
+        success = self._attempt_webhook_send(payload, primary_url)
+        
+        # If primary fails and we have a different main webhook as fallback
+        if not success and webhook_url and webhook_url != self.webhook_url and self.webhook_url:
+            logger.warning(f"Primary webhook failed, attempting fallback to main webhook")
+            success = self._attempt_webhook_send(payload, self.webhook_url)
+            if success:
+                logger.info("Fallback to main webhook succeeded")
+        
+        return success
+    
+    def _attempt_webhook_send(self, payload: Dict, url: str) -> bool:
+        """
+        Attempt to send payload to a single webhook URL.
+        
+        Args:
+            payload: Discord webhook payload
+            url: Webhook URL to send to
+            
+        Returns:
+            True if successful, False otherwise
+        """
         try:
-            url = webhook_url or self.webhook_url
+            if not url:
+                logger.error("No webhook URL provided")
+                return False
+            
             response = requests.post(
                 url,
                 json=payload,

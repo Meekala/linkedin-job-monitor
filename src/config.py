@@ -145,12 +145,39 @@ class LinkedInURLBuilder:
         return urls
 
 def get_config() -> Config:
-    """Get validated configuration instance."""
+    """Get validated configuration instance with Railway environment support."""
     config = Config.from_env()
     
-    if not config.validate():
-        raise ValueError("Configuration validation failed. Check your .env file.")
+    # Log configuration details for Railway debugging
+    import logging
+    logger = logging.getLogger(__name__)
     
+    railway_env = os.getenv('RAILWAY_ENVIRONMENT')
+    if railway_env:
+        logger.info(f"🚂 Running in Railway environment: {railway_env}")
+        logger.info(f"🌍 Environment variables loaded from Railway")
+    else:
+        logger.info("🏠 Running in local environment")
+        logger.info("📁 Environment variables loaded from .env file")
+    
+    # Log configuration summary (without sensitive data)
+    logger.info(f"🏙️ Monitoring cities: {', '.join(config.cities)}")
+    logger.info(f"💼 Job title: {config.job_title}")
+    logger.info(f"⏰ Check interval: {config.check_interval_minutes} minutes")
+    logger.info(f"💾 Database path: {config.database_path}")
+    
+    # Count configured webhooks
+    webhook_count = 0
+    if config.discord_webhook_url:
+        webhook_count += 1
+    webhook_count += sum(1 for url in config.discord_webhook_urls.values() if url)
+    logger.info(f"🔗 Discord webhooks configured: {webhook_count}")
+    
+    if not config.validate():
+        logger.error("❌ Configuration validation failed")
+        raise ValueError("Configuration validation failed. Check your environment variables in Railway or your .env file.")
+    
+    logger.info("✅ Configuration validated successfully")
     return config
 
 # Global configuration instance

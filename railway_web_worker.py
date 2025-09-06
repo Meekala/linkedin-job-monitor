@@ -36,27 +36,81 @@ last_search_time = None
 last_search_result = None
 
 def initialize_monitor():
-    """Initialize the job monitor."""
+    """Initialize the job monitor with enhanced error handling."""
     global job_monitor
     logger.info("🔧 Initializing LinkedIn Job Monitor...")
+    logger.info("=" * 50)
+    
+    # Check Railway environment
+    railway_env = os.getenv('RAILWAY_ENVIRONMENT', 'local')
+    logger.info(f"🚂 Railway Environment: {railway_env}")
+    
+    # Validate required environment variables
+    required_env_vars = ['DISCORD_WEBHOOK_URL', 'JOB_TITLE', 'CITIES']
+    missing_vars = []
+    
+    for var in required_env_vars:
+        value = os.getenv(var)
+        if value:
+            # Mask webhook URLs for security
+            if 'WEBHOOK' in var:
+                masked_value = f"{value[:25]}...{value[-15:]}" if len(value) > 40 else value[:30] + "..."
+                logger.info(f"  ✅ {var}: {masked_value}")
+            else:
+                logger.info(f"  ✅ {var}: {value}")
+        else:
+            missing_vars.append(var)
+            logger.error(f"  ❌ {var}: NOT SET")
+    
+    if missing_vars:
+        logger.error(f"❌ Missing required environment variables: {missing_vars}")
+        return False
+    
+    # Create data directory if it doesn't exist
+    data_dir = "data"
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+        logger.info(f"📁 Created data directory: {data_dir}")
     
     try:
         job_monitor = LinkedInJobMonitor()
+        logger.info("📊 Initializing monitor components...")
+        
         if job_monitor.initialize():
             logger.info("✅ Job monitor initialized successfully")
             
             # Send startup notification
+            startup_message = (
+                f"Railway Web Worker Started\n"
+                f"Environment: {railway_env}\n"
+                f"Time: {datetime.now().strftime('%H:%M:%S')}\n"
+                f"Cities: {', '.join(job_monitor.config.cities)}\n"
+                f"Job Title: {job_monitor.config.job_title}"
+            )
+            
             job_monitor.discord.notify_status(
                 "Railway Web Worker Started",
-                f"Job monitoring web worker started at {datetime.now().strftime('%H:%M:%S')}. Health check available at /health",
+                startup_message,
                 'info'
             )
+            
+            logger.info("🚀 Running immediate startup job search...")
+            # Run immediate job search to test everything works
+            try:
+                job_count = job_monitor.find_and_notify_jobs()
+                logger.info(f"🎯 Startup job search completed: {job_count} jobs found")
+            except Exception as e:
+                logger.error(f"⚠️ Startup job search failed: {e}")
+                # Don't fail initialization for this
+            
             return True
         else:
             logger.error("❌ Job monitor initialization failed")
             return False
+            
     except Exception as e:
         logger.error(f"❌ Error initializing monitor: {e}")
+        logger.error(f"Error details: {type(e).__name__}: {str(e)}")
         return False
 
 def scheduled_job_search():
@@ -116,28 +170,46 @@ def scheduled_job_search():
     logger.info("🏁 SCHEDULED JOB SEARCH COMPLETED")
 
 def start_scheduler():
-    """Start the job scheduler."""
+    """Start the job scheduler with enhanced configuration."""
     global scheduler
     logger.info("📅 Starting job scheduler...")
     
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(
+        timezone='US/Eastern',  # Set timezone for consistent scheduling
+        job_defaults={
+            'coalesce': False,
+            'max_instances': 1,
+            'misfire_grace_time': 300  # 5 minutes grace time
+        }
+    )
     
-    # Run first job immediately after 30 seconds to allow initialization
-    first_run = datetime.now() + timedelta(seconds=30)
-    logger.info(f"⏰ First job search will run at: {first_run.strftime('%H:%M:%S')}")
-    logger.info(f"⏰ Then every 30 minutes after that")
+    # Calculate interval from config (default 30 minutes)
+    interval_minutes = int(os.getenv('CHECK_INTERVAL_MINUTES', '30'))
     
-    # Schedule job every 30 minutes, starting soon
+    # Run first job after initialization delay
+    first_run = datetime.now() + timedelta(minutes=2)  # 2 minutes for full initialization
+    logger.info(f"⏰ First scheduled job will run at: {first_run.strftime('%H:%M:%S')}")
+    logger.info(f"⏰ Then every {interval_minutes} minutes after that")
+    
+    # Schedule recurring job search
     scheduler.add_job(
         func=scheduled_job_search,
-        trigger=IntervalTrigger(minutes=30),
+        trigger=IntervalTrigger(minutes=interval_minutes),
         start_date=first_run,
         id='railway_job_search',
-        name='Railway LinkedIn Job Search'
+        name=f'Railway LinkedIn Job Search (every {interval_minutes}m)',
+        replace_existing=True
     )
     
     scheduler.start()
-    logger.info("✅ Job scheduler started")
+    logger.info(f"✅ Job scheduler started (interval: {interval_minutes} minutes)")
+    
+    # Log scheduler info
+    logger.info(f"📊 Scheduler timezone: {scheduler.timezone}")
+    jobs = scheduler.get_jobs()
+    logger.info(f"📊 Active jobs: {len(jobs)}")
+    for job in jobs:
+        logger.info(f"  - {job.name} (next run: {job.next_run_time})")
 
 @app.route('/')
 def home():
@@ -153,19 +225,56 @@ def home():
 
 @app.route('/health')
 def health():
-    """Health check endpoint for Railway."""
+    """Enhanced health check endpoint for Railway."""
+    now = datetime.now()
+    
+    # Determine overall health status
+    is_healthy = True
+    issues = []
+    
+    if not job_monitor:
+        is_healthy = False
+        issues.append("Job monitor not initialized")
+    
+    if not scheduler or not scheduler.running:
+        is_healthy = False
+        issues.append("Scheduler not running")
+    
+    # Check if we've had a recent search (within last 2 hours)
+    if last_search_time:
+        minutes_since = int((now - last_search_time).total_seconds() / 60)
+        if minutes_since > 120:  # More than 2 hours
+            is_healthy = False
+            issues.append(f"No search in {minutes_since} minutes")
+    else:
+        issues.append("No searches recorded yet")
+    
     health_status = {
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'scheduler': 'running' if scheduler and scheduler.running else 'stopped',
-        'monitor': 'initialized' if job_monitor else 'not initialized'
+        'status': 'healthy' if is_healthy else 'unhealthy',
+        'timestamp': now.isoformat(),
+        'uptime_minutes': int((now - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() / 60),
+        'railway_environment': os.getenv('RAILWAY_ENVIRONMENT', 'local'),
+        'scheduler': {
+            'running': scheduler.running if scheduler else False,
+            'job_count': len(scheduler.get_jobs()) if scheduler else 0,
+            'next_job_time': scheduler.get_jobs()[0].next_run_time.isoformat() if scheduler and scheduler.get_jobs() else None
+        },
+        'monitor': {
+            'initialized': job_monitor is not None,
+            'cities': job_monitor.config.cities if job_monitor else None,
+            'job_title': job_monitor.config.job_title if job_monitor else None
+        },
+        'last_search': {
+            'time': last_search_time.isoformat() if last_search_time else None,
+            'minutes_ago': int((now - last_search_time).total_seconds() / 60) if last_search_time else None,
+            'result': last_search_result
+        },
+        'issues': issues
     }
     
-    if last_search_time:
-        health_status['last_search_time'] = last_search_time.isoformat()
-        health_status['minutes_since_last_search'] = int((datetime.now() - last_search_time).total_seconds() / 60)
-    
-    return jsonify(health_status)
+    # Return appropriate HTTP status
+    status_code = 200 if is_healthy else 503
+    return jsonify(health_status), status_code
 
 @app.route('/status')
 def status():
@@ -184,20 +293,33 @@ def status():
 
 @app.route('/trigger')  
 def trigger_search():
-    """Manually trigger a job search for testing."""
+    """Manually trigger a job search for testing with rate limiting."""
+    global last_search_time
+    
+    # Simple rate limiting - only allow manual triggers every 5 minutes
+    if last_search_time and (datetime.now() - last_search_time).total_seconds() < 300:
+        minutes_left = 5 - int((datetime.now() - last_search_time).total_seconds() / 60)
+        return jsonify({
+            'status': 'rate_limited',
+            'message': f'Please wait {minutes_left} minutes before triggering again',
+            'last_search_time': last_search_time.isoformat()
+        }), 429
+    
     try:
         logger.info("🔥 Manual job search triggered via web endpoint")
         scheduled_job_search()
         return jsonify({
             'status': 'success',
             'message': 'Job search triggered successfully',
+            'timestamp': datetime.now().isoformat(),
             'result': last_search_result
         })
     except Exception as e:
         logger.error(f"Error in manual trigger: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Error triggering job search: {str(e)}'
+            'message': f'Error triggering job search: {str(e)}',
+            'timestamp': datetime.now().isoformat()
         }), 500
 
 if __name__ == '__main__':
