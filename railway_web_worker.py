@@ -164,6 +164,30 @@ def scheduled_job_search():
     
     logger.info("🏁 SCHEDULED JOB SEARCH COMPLETED")
 
+def daily_summary_task():
+    """Send daily summary at 6 AM ET."""
+    logger.info("📊 STARTING DAILY SUMMARY")
+    
+    try:
+        # Send daily summary
+        job_monitor.send_daily_summary()
+        logger.info("✅ Daily summary sent successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Error sending daily summary: {e}")
+        
+        # Send error notification
+        try:
+            job_monitor.discord.notify_status(
+                "Daily Summary Error",
+                f"Error sending daily summary: {str(e)[:200]}",
+                'error'
+            )
+        except:
+            logger.error("Failed to send daily summary error notification")
+    
+    logger.info("🏁 DAILY SUMMARY COMPLETED")
+
 def start_scheduler():
     """Start the job scheduler with 9am start and consistent schedule."""
     global scheduler
@@ -184,7 +208,8 @@ def start_scheduler():
     # Schedule job to run at consistent times starting at 9:00 AM ET
     # This ensures jobs run at 9:00, 9:30, 10:00, 10:30, etc.
     logger.info(f"⏰ Scheduling jobs to run every {interval_minutes} minutes starting at 9:00 AM ET")
-    logger.info("📋 Schedule: 9:00 AM, 9:30 AM, 10:00 AM, 10:30 AM, etc.")
+    logger.info("📋 Job Search Schedule: 9:00 AM, 9:30 AM, 10:00 AM, 10:30 AM, etc.")
+    logger.info("📊 Daily Summary Schedule: 6:00 AM ET every day")
     
     # Use cron trigger to run at specific minute intervals aligned to the hour
     if interval_minutes == 30:
@@ -225,6 +250,19 @@ def start_scheduler():
         ),
         id='railway_job_search_cron',
         name=f'Railway LinkedIn Job Search (every {interval_minutes}m from 9 AM)',
+        replace_existing=True
+    )
+    
+    # Schedule daily summary at 6:00 AM ET
+    scheduler.add_job(
+        func=daily_summary_task,
+        trigger=CronTrigger(
+            minute=0,
+            hour=6,
+            timezone='US/Eastern'
+        ),
+        id='railway_daily_summary',
+        name='Daily Summary (6:00 AM ET)',
         replace_existing=True
     )
     
