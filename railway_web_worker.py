@@ -95,14 +95,8 @@ def initialize_monitor():
                 'info'
             )
             
-            logger.info("🚀 Running immediate startup job search...")
-            # Run immediate job search to test everything works
-            try:
-                job_count = job_monitor.find_and_notify_jobs()
-                logger.info(f"🎯 Startup job search completed: {job_count} jobs found")
-            except Exception as e:
-                logger.error(f"⚠️ Startup job search failed: {e}")
-                # Don't fail initialization for this
+            logger.info("✅ Monitor initialized - waiting for scheduled job searches")
+            logger.info("📅 Jobs will run at: 9:00, 9:30, 10:00, 10:30, etc. (Eastern Time)")
             
             return True
         else:
